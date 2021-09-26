@@ -2,6 +2,7 @@
 
 #[macro_use]
 extern crate napi_derive;
+extern crate napi_sys;
 
 use std::convert::TryInto;
 
@@ -34,14 +35,6 @@ impl Task for AsyncTask {
   }
 }
 
-#[module_exports]
-fn init(mut exports: JsObject) -> Result<()> {
-  exports.create_named_method("sync", sync_fn)?;
-  exports.create_named_method("sleep", sleep)?;
-  exports.create_named_method("info", info)?;
-  Ok(())
-}
-
 #[js_function(1)]
 fn sync_fn(ctx: CallContext) -> Result<JsNumber> {
   let argument: u32 = ctx.get::<JsNumber>(0)?.try_into()?;
@@ -57,28 +50,10 @@ fn sleep(ctx: CallContext) -> Result<JsObject> {
   Ok(async_task.promise_object())
 }
 
-//
-//
-//
-extern "C" {
-  fn napi_get_buffer_info(
-    env: &Env,
-    value: JsBuffer,
-    data: *mut *mut u8,
-    length: *mut usize
-  ) -> Status;
-}
-
 #[js_function(1)]
 fn info(ctx: CallContext) -> Result<JsNumber> {
-  //let mut len: usize = 0;
-  //let mut ptr: *mut u8 = std::ptr::null_mut();
   let jsb: JsBuffer = ctx.get::<JsBuffer>(0)?;
 
-  //const is_buf: Result = jsb.is_buffer();
-  //match is_buf {
-  //
-  //}
   if !jsb.is_buffer()? {
     let e = napi::Error {status: Status::InvalidArg, reason: "expected a buffer".to_string()};
     unsafe {
@@ -87,16 +62,61 @@ fn info(ctx: CallContext) -> Result<JsNumber> {
   }
 
   let l: u32 = jsb.get_named_property::<JsNumber>("length")?.try_into()?;
-  let buf = &mut jsb.into_value()?; // &mut [u8]
+  // into_value() conveniently returns &mut [u8]
+  let buf = &mut jsb.into_value()?;
 
   ctx.env.create_uint32(buf[1] as u32)
+}
 
+//
+//
+//
+//extern "C" {
+//  fn napi_get_buffer_info(
+//    env: &Env,
+//    value: JsBuffer,
+//    data: *mut *mut u8,
+//    length: *mut usize
+//  ) -> Status;
+//}
 
-  //unsafe {
-  //  let status: Status = napi_get_buffer_info(ctx.env, b, &mut ptr, &mut len);
-  //  if status != Status::Ok {
-  //    return ctx.env.create_uint32(9999);
-  //  }
-  //}
-  //ctx.env.create_uint32(len as u32)
+#[js_function(1)]
+fn info2(ctx: CallContext) -> Result<JsNumber> {
+  let mut len: usize = 0;
+  let mut ptr = std::ptr::null_mut();
+
+  let jsb: JsBuffer = ctx.get::<JsBuffer>(0)?;
+
+  if !jsb.is_buffer()? {
+    let e = napi::Error {status: Status::InvalidArg, reason: "expected a buffer".to_string()};
+    unsafe {
+      napi::JsTypeError::from(e).throw_into(ctx.env.raw());
+    }
+  }
+
+  unsafe {
+    use napi::NapiRaw;
+    let status: napi_sys::napi_status = napi_sys::napi_get_buffer_info(
+      ctx.env.raw(),
+      jsb.raw(),
+      &mut ptr,
+      &mut len
+    );
+    if status != napi_sys::Status::napi_ok {
+      return ctx.env.create_int32(-status);
+    }
+  }
+  ctx.env.create_uint32(len as u32)
+}
+
+//
+// exports
+//
+#[module_exports]
+fn init(mut exports: JsObject) -> Result<()> {
+  exports.create_named_method("sync", sync_fn)?;
+  exports.create_named_method("sleep", sleep)?;
+  exports.create_named_method("info", info)?;
+  exports.create_named_method("info2", info2)?;
+  Ok(())
 }
