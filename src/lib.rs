@@ -6,7 +6,13 @@ extern crate napi_sys;
 
 use std::convert::TryInto;
 
-use napi::{CallContext, Env, JsNumber, JsObject, Result, Task, Status, JsBuffer};
+use napi::{
+  Env, CallContext,
+  JsNumber, JsObject, JsString, JsBuffer, JsUnknown,
+  Result, Status,
+  NapiRaw,
+  Task,
+};
 
 #[cfg(all(
   any(windows, unix),
@@ -16,6 +22,8 @@ use napi::{CallContext, Env, JsNumber, JsObject, Result, Task, Status, JsBuffer}
 ))]
 #[global_allocator]
 static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
+static mut BAD_CHARS: [u8; 256] = [0; 256];
 
 struct AsyncTask(u32);
 
@@ -69,17 +77,8 @@ fn info(ctx: CallContext) -> Result<JsNumber> {
 }
 
 //
+// this version needs napi_sys
 //
-//
-//extern "C" {
-//  fn napi_get_buffer_info(
-//    env: &Env,
-//    value: JsBuffer,
-//    data: *mut *mut u8,
-//    length: *mut usize
-//  ) -> Status;
-//}
-
 #[js_function(1)]
 fn info2(ctx: CallContext) -> Result<JsNumber> {
   let mut len: usize = 0;
@@ -95,7 +94,7 @@ fn info2(ctx: CallContext) -> Result<JsNumber> {
   }
 
   unsafe {
-    use napi::NapiRaw;
+    //use napi::NapiRaw;
     let status: napi_sys::napi_status = napi_sys::napi_get_buffer_info(
       ctx.env.raw(),
       jsb.raw(),
@@ -109,6 +108,18 @@ fn info2(ctx: CallContext) -> Result<JsNumber> {
   ctx.env.create_uint32(len as u32)
 }
 
+#[js_function(1)]
+fn init_bad_chars(ctx: CallContext) -> Result<JsNumber> {
+  let jss = ctx.get::<JsString>(0)?;
+  let chars = jss.into_utf8()?;
+  //let chars = ctx.get::<JsString>(0)?.into_utf8()?;
+  // iterate over characters
+  //let text = format!("{} world!", chars.as_str()?);
+  //ctx.env.create_string(text.as_str())
+  let l: usize = jss.utf8_len()?;
+  ctx.env.create_uint32(l as u32)
+}
+
 //
 // exports
 //
@@ -118,5 +129,6 @@ fn init(mut exports: JsObject) -> Result<()> {
   exports.create_named_method("sleep", sleep)?;
   exports.create_named_method("info", info)?;
   exports.create_named_method("info2", info2)?;
+  exports.create_named_method("setStopChars", init_bad_chars)?;
   Ok(())
 }
