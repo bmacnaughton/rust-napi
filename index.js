@@ -1,4 +1,4 @@
-const { loadBinding } = require('@node-rs/helper')
+const { loadBinding } = require('@node-rs/helper');
 
 /**
  * __dirname means load native addon from current dir
@@ -8,4 +8,4 @@ const { loadBinding } = require('@node-rs/helper')
  * loadBinding helper will load `package-template.[PLATFORM].node` from `__dirname` first
  * If failed to load addon, it will fallback to load from `@napi-rs/package-template-[PLATFORM]`
  */
-module.exports = loadBinding(__dirname, 'package-template', '@napi-rs/package-template')
+module.exports = loadBinding(__dirname, 'package-template', '@napi-rs/package-template');

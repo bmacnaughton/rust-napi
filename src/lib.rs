@@ -5,7 +5,7 @@ extern crate napi_derive;
 
 use std::convert::TryInto;
 
-use napi::{CallContext, Env, JsNumber, JsObject, Result, Task};
+use napi::{CallContext, Env, JsNumber, JsObject, Result, Task, Status, JsBuffer};
 
 #[cfg(all(
   any(windows, unix),
@@ -37,8 +37,8 @@ impl Task for AsyncTask {
 #[module_exports]
 fn init(mut exports: JsObject) -> Result<()> {
   exports.create_named_method("sync", sync_fn)?;
-
   exports.create_named_method("sleep", sleep)?;
+  exports.create_named_method("info", info)?;
   Ok(())
 }
 
@@ -55,4 +55,48 @@ fn sleep(ctx: CallContext) -> Result<JsObject> {
   let task = AsyncTask(argument);
   let async_task = ctx.env.spawn(task)?;
   Ok(async_task.promise_object())
+}
+
+//
+//
+//
+extern "C" {
+  fn napi_get_buffer_info(
+    env: &Env,
+    value: JsBuffer,
+    data: *mut *mut u8,
+    length: *mut usize
+  ) -> Status;
+}
+
+#[js_function(1)]
+fn info(ctx: CallContext) -> Result<JsNumber> {
+  //let mut len: usize = 0;
+  //let mut ptr: *mut u8 = std::ptr::null_mut();
+  let jsb: JsBuffer = ctx.get::<JsBuffer>(0)?;
+
+  //const is_buf: Result = jsb.is_buffer();
+  //match is_buf {
+  //
+  //}
+  if !jsb.is_buffer()? {
+    let e = napi::Error {status: Status::InvalidArg, reason: "expected a buffer".to_string()};
+    unsafe {
+      napi::JsTypeError::from(e).throw_into(ctx.env.raw());
+    }
+  }
+
+  let l: u32 = jsb.get_named_property::<JsNumber>("length")?.try_into()?;
+  let buf = &mut jsb.into_value()?; // &mut [u8]
+
+  ctx.env.create_uint32(buf[1] as u32)
+
+
+  //unsafe {
+  //  let status: Status = napi_get_buffer_info(ctx.env, b, &mut ptr, &mut len);
+  //  if status != Status::Ok {
+  //    return ctx.env.create_uint32(9999);
+  //  }
+  //}
+  //ctx.env.create_uint32(len as u32)
 }
