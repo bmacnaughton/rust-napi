@@ -108,6 +108,9 @@ fn info2(ctx: CallContext) -> Result<JsNumber> {
   ctx.env.create_uint32(len as u32)
 }
 
+//
+// not very easy to return multiple types with this particular api
+//
 #[js_function(1)]
 fn init_bad_chars(ctx: CallContext) -> Result<JsNumber> {
   let jss = ctx.get::<JsString>(0)?;
@@ -120,6 +123,45 @@ fn init_bad_chars(ctx: CallContext) -> Result<JsNumber> {
   ctx.env.create_uint32(l as u32)
 }
 
+const INIT_ARG_COUNT: usize = 1;
+//
+// fall back to napi_ for more flexibility
+//
+use napi_sys::{
+  napi_env, napi_callback_info, napi_get_cb_info,
+  napi_status,
+  napi_value,
+  napi_create_uint32
+};
+extern "C" fn napi_init(env: napi_env, info: napi_callback_info) -> napi_value {
+  let mut argc: usize = INIT_ARG_COUNT;
+
+  //static mut BAD_CHARS: [u8; 256] = [0; 256];
+
+  let mut argv: [napi_value; INIT_ARG_COUNT] = [std::ptr::null_mut(); INIT_ARG_COUNT];
+  let mut this_arg: napi_value = std::ptr::null_mut();
+
+  unsafe {
+    let status: napi_status = napi_get_cb_info(env, info, &mut argc, argv.as_mut_ptr(), &mut this_arg, std::ptr::null_mut());
+  }
+
+  let mut result: napi_value = std::ptr::null_mut();
+
+
+  //unsafe {
+  //  let status: napi_status = napi_create_uint32(env, argc as u32, &mut result);
+  //}
+
+
+  // thank you reddit
+  // https://www.reddit.com/r/rust/comments/96om71/how_to_allocate_and_pass_byte_array_to_c_function/
+
+  let slice = unsafe {std::slice::from_raw_parts(argv.as_mut_ptr(), argc)};
+
+  return slice[0];
+}
+
+
 //
 // exports
 //
@@ -130,5 +172,6 @@ fn init(mut exports: JsObject) -> Result<()> {
   exports.create_named_method("info", info)?;
   exports.create_named_method("info2", info2)?;
   exports.create_named_method("setStopChars", init_bad_chars)?;
+  exports.create_named_method("init", napi_init)?;
   Ok(())
 }
