@@ -7,8 +7,8 @@ extern crate napi_sys;
 use std::convert::TryInto;
 
 use napi::{
-  Env, CallContext,
-  JsNumber, JsObject, JsString, JsBuffer, JsUnknown,
+  Env, CallContext,Property,
+  JsNumber, JsObject, JsString, JsBuffer, JsBoolean, JsUndefined,
   Result, Status,
   NapiRaw,
   Task,
@@ -22,8 +22,6 @@ use napi::{
 ))]
 #[global_allocator]
 static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
-
-static mut BAD_CHARS: [u8; 256] = [0; 256];
 
 struct AsyncTask(u32);
 
@@ -108,8 +106,64 @@ fn info2(ctx: CallContext) -> Result<JsNumber> {
   ctx.env.create_uint32(len as u32)
 }
 
+//+++++++++++++++++++++++++++++++++
+// class-based approach
+//---------------------------------
+struct Scanner {
+  bad_chars: [bool; 256],
+  prev_byte: u8
+}
+
+const DASH: u8 = '-' as u8;
+
+#[js_function(1)]
+fn scanner_constructor(ctx: CallContext) -> Result<JsUndefined> {
+  let mut bad_chars: [bool; 256] = [false; 256];
+
+  let stop_chars = &mut ctx.get::<JsBuffer>(0)?.into_value()?;
+
+  for stop_char in stop_chars.into_iter() {
+    bad_chars[*stop_char as usize] = true;
+  }
+
+  let mut scanner = Scanner {bad_chars: bad_chars, prev_byte: 0xFF};
+
+  let mut this: JsObject = ctx.this_unchecked();
+  ctx.env.wrap(&mut this, scanner)?;
+
+  ctx.env.get_undefined()
+}
+
+#[js_function(1)]
+fn scanner_get(ctx: CallContext) -> Result<JsBoolean> {
+  let ix: u32 = ctx.get::<JsNumber>(0)?.try_into()?;
+  let this: JsObject = ctx.this_unchecked();
+  let scanner: &mut Scanner = ctx.env.unwrap(&this)?;
+
+  ctx.env.get_boolean(scanner.bad_chars[ix as usize])
+}
+
+#[js_function(1)]
+fn scanner_suspicious(ctx: CallContext) -> Result<JsBoolean> {
+  let bytes = &mut ctx.get::<JsBuffer>(0)?.into_value()?;
+  let this: JsObject = ctx.this_unchecked();
+  let scanner: &mut Scanner = ctx.env.unwrap(&this)?;
+
+  for byte in bytes.into_iter() {
+    if scanner.bad_chars[*byte as usize] {
+      return ctx.env.get_boolean(true);
+    }
+    if *byte == DASH && scanner.prev_byte == DASH {
+      return ctx.env.get_boolean(true);
+    }
+    scanner.prev_byte = *byte;
+  }
+  ctx.env.get_boolean(false)
+}
+
+
 //
-// not very easy to return multiple types with this particular api
+// not ~~very easy~~ possible to return multiple types with this particular api
 //
 #[js_function(1)]
 fn init_bad_chars(ctx: CallContext) -> Result<JsNumber> {
@@ -147,12 +201,6 @@ extern "C" fn napi_init(env: napi_env, info: napi_callback_info) -> napi_value {
 
   let mut result: napi_value = std::ptr::null_mut();
 
-
-  //unsafe {
-  //  let status: napi_status = napi_create_uint32(env, argc as u32, &mut result);
-  //}
-
-
   // thank you reddit
   // https://www.reddit.com/r/rust/comments/96om71/how_to_allocate_and_pass_byte_array_to_c_function/
 
@@ -166,12 +214,18 @@ extern "C" fn napi_init(env: napi_env, info: napi_callback_info) -> napi_value {
 // exports
 //
 #[module_exports]
-fn init(mut exports: JsObject) -> Result<()> {
+fn init(mut exports: JsObject, env: Env) -> Result<()> {
   exports.create_named_method("sync", sync_fn)?;
   exports.create_named_method("sleep", sleep)?;
   exports.create_named_method("info", info)?;
   exports.create_named_method("info2", info2)?;
   exports.create_named_method("setStopChars", init_bad_chars)?;
   exports.create_named_method("init", napi_init)?;
+
+  let sclass = env.define_class("Scanner", scanner_constructor, &[
+    Property::new(&env, "get")?.with_method(scanner_get),
+    Property::new(&env, "suspicious")?.with_method(scanner_suspicious),
+  ])?;
+  exports.set_named_property("Scanner", sclass)?;
   Ok(())
 }
