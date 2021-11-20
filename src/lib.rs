@@ -8,7 +8,7 @@ use std::convert::TryInto;
 
 use napi::{
   Env, CallContext,Property,
-  JsNumber, JsObject, JsString, JsBuffer, JsBoolean, JsUndefined,
+  JsNumber, JsObject, JsString, JsBuffer, JsBoolean, JsUndefined, JsUnknown,
   Result, Status,
   NapiRaw,
   Task,
@@ -106,6 +106,35 @@ fn info2(ctx: CallContext) -> Result<JsNumber> {
   ctx.env.create_uint32(len as u32)
 }
 
+#[js_function(1)]
+fn info3(ctx: CallContext) -> Result<JsBoolean> {
+    let mut ptr: napi_value = std::ptr::null_mut();
+    let mut val: napi_value = std::ptr::null_mut();
+
+    let jsu: JsUnknown = ctx.get::<JsUnknown>(0)?;
+
+    unsafe {
+        //use napi::NapiRaw;
+        let mut status: napi_sys::napi_status = napi_sys::napi_coerce_to_bool(
+            ctx.env.raw(),
+            jsu.raw(),
+            &mut val
+        );
+        if status != napi_sys::Status::napi_ok {
+            let e = napi::Error {status: Status::InvalidArg, reason: "hmmm".to_string()};
+            napi::JsTypeError::from(e).throw_into(ctx.env.raw());
+        }
+        let mut b: &mut bool = &mut false;
+        status = napi_sys::napi_get_value_bool(ctx.env.raw(), val, &mut *b);
+        if status != napi_sys::Status::napi_ok {
+            let e = napi::Error {status: Status::InvalidArg, reason: "hmmm2".to_string()};
+            napi::JsTypeError::from(e).throw_into(ctx.env.raw());
+        }
+
+        ctx.env.get_boolean(*b)
+    }
+}
+
 //+++++++++++++++++++++++++++++++++
 // class-based approach
 //---------------------------------
@@ -126,7 +155,7 @@ fn scanner_constructor(ctx: CallContext) -> Result<JsUndefined> {
     bad_chars[*stop_char as usize] = true;
   }
 
-  let mut scanner = Scanner {bad_chars: bad_chars, prev_byte: 0xFF};
+  let mut scanner = Scanner {bad_chars, prev_byte: 0xFF};
 
   let mut this: JsObject = ctx.this_unchecked();
   ctx.env.wrap(&mut this, scanner)?;
@@ -185,12 +214,9 @@ use napi_sys::{
   napi_env, napi_callback_info, napi_get_cb_info,
   napi_status,
   napi_value,
-  napi_create_uint32
 };
 extern "C" fn napi_init(env: napi_env, info: napi_callback_info) -> napi_value {
   let mut argc: usize = INIT_ARG_COUNT;
-
-  //static mut BAD_CHARS: [u8; 256] = [0; 256];
 
   let mut argv: [napi_value; INIT_ARG_COUNT] = [std::ptr::null_mut(); INIT_ARG_COUNT];
   let mut this_arg: napi_value = std::ptr::null_mut();
@@ -206,7 +232,20 @@ extern "C" fn napi_init(env: napi_env, info: napi_callback_info) -> napi_value {
 
   let slice = unsafe {std::slice::from_raw_parts(argv.as_mut_ptr(), argc)};
 
-  return slice[0];
+  slice[0]
+}
+
+struct Test {
+  value: i32
+}
+
+impl Test {
+  pub fn new(value: i32) -> std::result::Result<Self, String> {
+    if value > 42 {
+      return Err(String::from("error"));
+    }
+    Ok(Test {value})
+  }
 }
 
 
@@ -219,6 +258,7 @@ fn init(mut exports: JsObject, env: Env) -> Result<()> {
   exports.create_named_method("sleep", sleep)?;
   exports.create_named_method("info", info)?;
   exports.create_named_method("info2", info2)?;
+  exports.create_named_method("info3", info3)?;
   exports.create_named_method("setStopChars", init_bad_chars)?;
   exports.create_named_method("init", napi_init)?;
 
