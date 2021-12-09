@@ -2,7 +2,7 @@
 
 const {Mem} = require('./test.linux-x64-gnu.node');
 
-
+const N = 1000000;
 class Mem2 {
   constructor(n) {
     this.buffer = Buffer.alloc(n * 8);
@@ -25,8 +25,8 @@ if (how === 'rust') {
 console.log(`executing with ${how} allocator`);
 
 // execute both to set baseline initialization costs.
-new Mem(1000000);
-new Mem2(1000000);
+new Mem(N);
+new Mem2(N);
 
 let lastMemTime = Date.now();
 let i = process.memoryUsage();
@@ -37,7 +37,7 @@ setInterval(allocate, 1);
 
 function allocate() {
   for (let i = 0; i < 2; i++) {
-    const m = new Ctor(1000000);
+    const m = new Ctor(N);
     count += 1;
   }
   if (Date.now() - lastMemTime > 5000) {
