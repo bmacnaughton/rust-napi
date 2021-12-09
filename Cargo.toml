@@ -12,7 +12,7 @@ crate-type = ["cdylib"]
 [dependencies]
 napi = "1"
 napi-derive = "1"
-napi-sys = "1"
+napi-sys = "2"
 js-sys = "0.3.54"
 
 [target.'cfg(all(any(windows, unix), target_arch = "x86_64", not(target_env = "musl")))'.dependencies]
