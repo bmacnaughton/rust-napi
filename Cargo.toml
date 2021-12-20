@@ -11,7 +11,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 napi = "2.0"
-napi-derive = "1"
+napi-derive = "2"
 napi-sys = "2.1.0"
 js-sys = "0.3.54"
 
