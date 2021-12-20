@@ -10,7 +10,7 @@ version = "0.1.0"
 crate-type = ["cdylib"]
 
 [dependencies]
-napi = "1.8"
+napi = "2.0"
 napi-derive = "1"
 napi-sys = "2.1.0"
 js-sys = "0.3.54"
