@@ -19,7 +19,7 @@ js-sys = "0.3.54"
 mimalloc = {version = "0.1"}
 
 [build-dependencies]
-napi-build = "1.2"
+napi-build = "2.0"
 
 [profile.release]
 lto = true
