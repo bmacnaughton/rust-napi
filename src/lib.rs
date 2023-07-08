@@ -2,7 +2,6 @@
 
 #[macro_use]
 extern crate napi_derive;
-extern crate libc;
 extern crate napi_sys;
 
 use std::convert::TryInto;
@@ -322,6 +321,25 @@ unsafe extern "C" fn make_ab2(env: napi_env, info: napi_callback_info) -> napi_v
     result
 }
 
+#[js_function(1)]
+fn get_count(ctx: CallContext) -> Result<JsNumber> {
+    let thing = ctx.get::<JsUnknown>(0)?;
+    if thing.is_buffer()? {
+        let bytes = unsafe { thing.cast::<JsBuffer>().into_value()? };
+        ctx.env.create_uint32(bytes.len() as u32)
+    } else if thing.get_type()? == napi::ValueType::String {
+        let string = unsafe { thing.cast::<JsString>().into_utf8()? };
+        ctx.env
+            .create_uint32(string.as_str()?.to_string().len() as u32)
+    } else {
+        let e = napi::Error::new(
+            Status::InvalidArg,
+            "expected a buffer or string".to_string(),
+        );
+        Err(e)
+    }
+}
+
 fn make_int32(env: napi_env, status: i32) -> napi_value {
     let mut number: napi_value = std::ptr::null_mut();
     let _status = unsafe { napi_create_int32(env, status, &mut number) };
@@ -356,6 +374,7 @@ fn init(mut exports: JsObject, env: Env) -> Result<()> {
     exports.create_named_method("init", napi_init)?;
     exports.create_named_method("makeAB", make_ab)?;
     exports.create_named_method("makeAB2", make_ab2)?;
+    exports.create_named_method("getCount", get_count)?;
 
     /*
     let sclass = env.define_class(
