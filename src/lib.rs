@@ -329,8 +329,30 @@ fn get_count(ctx: CallContext) -> Result<JsNumber> {
         ctx.env.create_uint32(bytes.len() as u32)
     } else if thing.get_type()? == napi::ValueType::String {
         let string = unsafe { thing.cast::<JsString>().into_utf8()? };
-        ctx.env
-            .create_uint32(string.as_str()?.to_string().len() as u32)
+        let string = string.as_str()?.to_string();
+        ctx.env.create_uint32(string.len() as u32)
+    } else if thing.get_type()? == napi::ValueType::Object {
+        let object = unsafe { thing.cast::<JsObject>() };
+        let string = object.coerce_to_string()?;
+        ctx.env.create_uint32(string.utf8_len()? as u32)
+    } else {
+        let e = napi::Error::new(
+            Status::InvalidArg,
+            "expected a buffer or string".to_string(),
+        );
+        Err(e)
+    }
+}
+
+#[js_function(1)]
+fn return_string(ctx: CallContext) -> Result<JsString> {
+    let thing = ctx.get::<JsUnknown>(0)?;
+    if thing.get_type()? == napi::ValueType::String {
+        Ok(unsafe { thing.cast::<JsString>() })
+    } else if thing.get_type()? == napi::ValueType::Object {
+        let object = unsafe { thing.cast::<JsObject>() };
+        let string = object.coerce_to_string()?;
+        Ok(string)
     } else {
         let e = napi::Error::new(
             Status::InvalidArg,
@@ -375,6 +397,7 @@ fn init(mut exports: JsObject, env: Env) -> Result<()> {
     exports.create_named_method("makeAB", make_ab)?;
     exports.create_named_method("makeAB2", make_ab2)?;
     exports.create_named_method("getCount", get_count)?;
+    exports.create_named_method("returnString", return_string)?;
 
     /*
     let sclass = env.define_class(
